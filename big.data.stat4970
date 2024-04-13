@@ -1,4 +1,3 @@
-
 library(readr)
 games <- read_csv("games.csv")
 rpe <- read_csv("rpe.csv")
@@ -37,8 +36,15 @@ rm(games)
 ##############################################
 # merging necessary datasets
 library(dplyr)
-m.wr <- full_join(r7.wellness,r7.rpe) # correct
-m.gg <- full_join(r7.gps,r7.games, by = "GameID")
+half1 <- subset(r7.gps, Half == 1)
+half2 <- subset(r7.gps, Half == 2)
+avg_speed_half1 <- aggregate(Speed ~ GameID + PlayerID, data = half1, FUN = mean, na.rm = TRUE)
+avg_speed_half2 <- aggregate(Speed ~ GameID + PlayerID, data = half2, FUN = mean, na.rm = TRUE)
+gps.avspeed <- merge(avg_speed_half1, avg_speed_half2, by = c("GameID", "PlayerID"), suffixes = c(".Half1", ".Half2"))
+gps.avspeed$TimeDiff <- gps.avspeed$Speed.Half1 - gps.avspeed$Speed.Half2
+
+m.wr <- full_join(r7.wellness,r7.rpe, by = c("Date", "PlayerID")) # correct
+m.gg <- full_join(gps.avspeed,r7.games, by = "GameID")
 ##############################################
 ##############################################
 
@@ -68,9 +74,8 @@ bd.fatigue$USG.level <- ifelse(is.na(bd.fatigue$USG), NA,
   ifelse(bd.fatigue$USG >= 1.025 & bd.fatigue$USG <= 1.035, 2, 
   ifelse(bd.fatigue$USG  > 1.035, 1, NA )))) 
 
-# another resource used on the calculations. 
-# https://www.webmd.com/a-to-z-guides/what-is-urine-specific-gravity
-I used the standard from the overview of the data set, but I used other standards as well. 
+# check paper for resource on the calculations. I used the standard from the
+# overview of the data set, but I used other standards as well. 
 # 3 = 1.002 - 1.025 = Normal, 2 = 1.025 - 1.035 = Moderate dehydration, 
 # 1 = > 1.035 = Severe Dehydration
 
@@ -192,33 +197,32 @@ fviz_contrib(pca.b, choice = "var", axes = 1, top = 10)
 fviz_contrib(pca.b, choice = "var", axes = 2, top = 10)
 
 ############################################## 
+
+
 scores <- predict(pca.b, newdata =pca.s )
 pca.data <- cbind(pca.s, scores)
-pca.data <- subset(pca.data, select = -c(Comp.3,Comp.4 ,Comp.5 ,Comp.6 , 
-Comp.12  ,Comp.13  ,Comp.7 , Comp.8,Comp.9 ,Comp.10,Comp.11 ))
+pca.data1 <- subset(pca.data, select = 
+  c(PlayerID,ACR,Comp.1, Comp.2))
+
+
+pca.data1$ACR1<- ifelse(is.na(pca.data1$ACR), NA,
+    ifelse(pca.data1$ACR == 1, "High TL",
+    ifelse(pca.data1$ACR == 2, "Low TL",        
+ifelse(pca.data1$ACR == 3 ,"Moderate TL", NA))))
+
+
+
+m.gg1 <- subset(m.gg, select = -c(Opponent, GameID, TeamPointsAllowed, 
+   Speed.Half1, Speed.Half2, Date    ))
+
+m.full <- full_join(pca.data1,m.gg1, by='PlayerID')
+
+
+k <- lm(Comp.1 ~ TimeDiff + Outcome + TeamPoints 
+        + ACR1, data = m.full)
+summary(k)
+l <- lm(Comp.2 ~ TimeDiff + Outcome + TeamPoints 
+        + ACR1, data = m.full)
+summary(l)
+
 ############################################## 
-# Plot Comp.1 with ACR
-library(GridExtra)
-
-pca.data$ACR1<- ifelse(is.na(pca.data$ACR), NA,
-    ifelse(pca.data$ACR == 1, "High TL",
-    ifelse(pca.data$ACR == 2, "Low TL",        
-ifelse(pca.data$ACR == 3 ,"Moderate TL", NA))))
-
-
-plot_comp1_acr <- ggplot(pca.data, aes(x = as.factor(ACR1), y = Comp.1)) +
-  geom_boxplot(fill = "skyblue", color = "blue") +
-  stat_summary(fun = mean, geom = "point", shape = 18, size = 3, color = "blue") +
-  stat_summary(fun.data = mean_sdl, fun.args = list(mult = 1), geom = "errorbar", width = 0.2, color = "blue") +
-  labs(x = "Training Load Level", y = "Fatigue: Subjective") +
-  theme_minimal()
-
-plot_comp2_acr <- ggplot(pca.data, aes(x = as.factor(ACR1), y = Comp.2)) +
-  geom_boxplot(fill = "lightgreen", color = "darkgreen") +
-  stat_summary(fun = mean, geom = "point", shape = 18, size = 3, color = "darkgreen") +
-  stat_summary(fun.data = mean_sdl, fun.args = list(mult = 1), geom = "errorbar", width = 0.2, color = "darkgreen") +
-  labs(x = "Training Load Level", y = "Fatigue: Objective") +
-  theme_minimal()
-
-grid.arrange(plot_comp1_acr, plot_comp2_acr, ncol = 2)
-
