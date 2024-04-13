@@ -1,0 +1,224 @@
+
+library(readr)
+games <- read_csv("games.csv")
+rpe <- read_csv("rpe.csv")
+gps <- read_csv("gps.csv")
+wellness <- read_csv("wellness.csv")
+##############################################
+r.games <- games
+r.rpe <- rpe
+r.gps <- gps
+r.wellness <- wellness
+##############################################
+r7.games <- subset(r.games, select=c(
+  GameID, Date, Outcome, Opponent, TeamPoints,
+  TeamPointsAllowed))
+##############################################
+r7.rpe <- subset(r.rpe, select=c(
+  Date, PlayerID, SessionLoad, DailyLoad,
+  AcuteChronicRatio, ObjectiveRating, FocusRating))
+##############################################
+r7.gps <- subset(r.gps, select=c(
+  GameID, Half, PlayerID, Speed))
+##############################################
+r7.wellness <- subset(r.wellness, select=c( Date,
+  PlayerID, Fatigue, Soreness,Desire, Irritability, 
+  SleepQuality, Pain, Illness,  Nutrition, USG, 
+  TrainingReadiness, MonitoringScore,Menstruation,SleepHours ))
+##############################################
+rm(r.wellness)
+rm(r.gps)
+rm(r.rpe)
+rm(r.games)
+rm(wellness)
+rm(gps)
+rm(rpe)
+rm(games)
+##############################################
+# merging necessary datasets
+library(dplyr)
+m.wr <- full_join(r7.wellness,r7.rpe) # correct
+m.gg <- full_join(r7.gps,r7.games, by = "GameID")
+##############################################
+##############################################
+
+
+#write.csv(m.wr, 'm.wr.csv')
+#m.wr <- read_csv("m.wr.csv")
+
+##############################################
+##############################################
+
+bd.fatigue <- m.wr
+
+# fixing the percentages for TrainingReadiness into 10 levels
+bd.fatigue$TrainingReadiness<- as.numeric(sub("%", "", bd.fatigue$TrainingReadiness)) / 100
+bd.fatigue$train.ready <- cut(bd.fatigue$TrainingReadiness, breaks = 10, labels = FALSE)
+
+#table(bd.fatigue$train.ready)
+#table(bd.fatigue$TrainingReadiness)
+
+##############################################
+
+table(bd.fatigue$USG)
+
+#sum(is.na(bd.fatigue$nutrition.n))    2162
+bd.fatigue$USG.level <- ifelse(is.na(bd.fatigue$USG), NA,
+  ifelse(bd.fatigue$USG < 1.025 & bd.fatigue$USG >=  1.002, 3,                     
+  ifelse(bd.fatigue$USG >= 1.025 & bd.fatigue$USG <= 1.035, 2, 
+  ifelse(bd.fatigue$USG  > 1.035, 1, NA )))) 
+
+# another resource used on the calculations. 
+# https://www.webmd.com/a-to-z-guides/what-is-urine-specific-gravity
+I used the standard from the overview of the data set, but I used other standards as well. 
+# 3 = 1.002 - 1.025 = Normal, 2 = 1.025 - 1.035 = Moderate dehydration, 
+# 1 = > 1.035 = Severe Dehydration
+
+##############################################
+
+#table(bd.fatigue$AcuteChronicRatio)
+bd.fatigue$ACR <- ifelse(is.na(bd.fatigue$AcuteChronicRatio), NA,
+    ifelse(bd.fatigue$AcuteChronicRatio > 1.2, 1,
+    ifelse(bd.fatigue$AcuteChronicRatio <= 1.2 & bd.fatigue$AcuteChronicRatio >= 0.8, 3, 
+    ifelse(bd.fatigue$AcuteChronicRatio < .8, 2, NA))))      
+#table(bd.fatigue$ACR) # sum(is.na(bd.fatigue$ACR)) # 6694
+
+# 1 = great risk of injury, overload train
+# 2 = normal values 
+# 3 = undertraining or recovery - little exertion
+
+##############################################
+#table(bd.fatigue$Nutrition)
+
+bd.fatigue$nutrition.n <- ifelse(is.na(bd.fatigue$Nutrition), NA,
+     ifelse(bd.fatigue$Nutrition == "Excellent", 3,
+     ifelse(bd.fatigue$Nutrition == "Okay", 2,
+      ifelse(bd.fatigue$Nutrition == "Poor", 1, NA))))
+
+#table(bd.fatigue$nutrition.n) 
+##############################################
+
+#table(bd.fatigue$Illness)
+bd.fatigue$illness.n <- ifelse(is.na(bd.fatigue$Illness), NA,
+ifelse(bd.fatigue$Illness == "No", 3,
+ifelse(bd.fatigue$Illness == "Slightly Off", 2,
+ifelse(bd.fatigue$Illness ==  "Yes", 1, NA)))) 
+# 1 = illness, 2 = slightly off, 3= no illness
+# table(bd.fatigue$illness.n) sum(is.na(bd.fatigue$illness.n)) #433
+
+##############################################
+
+
+#table(bd.fatigue$MonitoringScore)
+bd.fatigue$MS.score <- ifelse(is.na(bd.fatigue$MonitoringScore), NA,
+    ifelse(bd.fatigue$MonitoringScore >= 5 & bd.fatigue$MonitoringScore < 15, 1,
+    ifelse(bd.fatigue$MonitoringScore >= 15 & bd.fatigue$MonitoringScore < 25, 2, 
+    ifelse(bd.fatigue$MonitoringScore >= 25 & bd.fatigue$MonitoringScore <= 35, 3, NA))))   
+#table(bd.fatigue$MS.score)
+
+# 1 = low perceived wellness, 2 =  average perceived wellness, 3 = high perceived wellness
+
+
+##############################################
+# table(bd.fatigue$DailyLoad)
+# summary(bd.fatigue$DailyLoad) 
+# based on this breaking up into 4 sections
+  # 0-574 = minimal - average session load, 575-1149 = minimal - average session load, 
+  # 1150 - 1724 = average - heavier session load, 1725 - 2300 = heavier session load
+
+bd.fatigue$DL.session <- ifelse(is.na(bd.fatigue$DailyLoad), NA,
+    ifelse(bd.fatigue$DailyLoad >= 0 & bd.fatigue$DailyLoad < 575, 1,
+    ifelse(bd.fatigue$DailyLoad >= 575 & bd.fatigue$DailyLoad < 1150, 2, 
+    ifelse(bd.fatigue$DailyLoad >= 1150 & bd.fatigue$DailyLoad < 1725, 3, 
+    ifelse(bd.fatigue$DailyLoad >= 1725, 4, NA)))))    
+# table(bd.fatigue$DL.session)
+
+
+##############################################
+
+
+f.pca <- subset(bd.fatigue, select = c(Fatigue,Soreness,Desire,
+Irritability,SleepQuality,Illness,Pain,Date,
+PlayerID,
+nutrition.n,USG.level,train.ready,ObjectiveRating,FocusRating,
+SleepHours,DL.session,MS.score,ACR ))
+
+f.pca$train.ready <- as.numeric(f.pca$train.ready)
+
+##############################################
+
+# separate bc i might need f.pca again..
+pca.s <- subset(na.omit(f.pca), select = c(Fatigue,Soreness,Desire,
+Irritability,SleepQuality,Illness,Pain,Date,
+PlayerID,
+nutrition.n,USG.level,train.ready,ObjectiveRating,FocusRating,
+SleepHours,DL.session,MS.score,ACR ))
+pca.s$train.ready <- as.numeric(pca.s$train.ready)
+############################################## 
+
+# looking at cor
+
+library(corrr)
+library(ggcorrplot)
+pca.sf<- subset(na.omit(pca.s), select = -c(Illness,Pain,Date,
+    PlayerID, ACR))
+pca.sf <- scale(pca.sf, center=TRUE, scale=TRUE)
+head(pca.sf)
+sf.matrix <- cor(pca.sf)
+ggcorrplot(sf.matrix)
+
+# PCA
+pca.b<-princomp(sf.matrix)
+summary(pca.b) 
+#visualizingexplained variance
+library(factoextra)
+fviz_eig(pca.b, addlabels = TRUE)
+
+####################
+# extract the results for variables
+var.a <- get_pca_var(pca.b)
+#names(pca.b)
+l1 <- round(pca.b$loadings[, 1], 2)
+l2 <- round(pca.b$loadings[, 2], 2)
+l1[order(abs(l1), decreasing = TRUE)]
+ l2[order(abs(l2), decreasing = TRUE)]
+
+# visualizing variable contributions
+fviz_pca_var(pca.b, col.var="contrib",
+gradient.cols = c("purple", "red", "green"),repel = TRUE)
+# contribution of variables to PC1
+fviz_contrib(pca.b, choice = "var", axes = 1, top = 10)
+# Contributions of variables to PC2
+fviz_contrib(pca.b, choice = "var", axes = 2, top = 10)
+
+############################################## 
+scores <- predict(pca.b, newdata =pca.s )
+pca.data <- cbind(pca.s, scores)
+pca.data <- subset(pca.data, select = -c(Comp.3,Comp.4 ,Comp.5 ,Comp.6 , 
+Comp.12  ,Comp.13  ,Comp.7 , Comp.8,Comp.9 ,Comp.10,Comp.11 ))
+############################################## 
+# Plot Comp.1 with ACR
+library(GridExtra)
+
+pca.data$ACR1<- ifelse(is.na(pca.data$ACR), NA,
+    ifelse(pca.data$ACR == 1, "High TL",
+    ifelse(pca.data$ACR == 2, "Low TL",        
+ifelse(pca.data$ACR == 3 ,"Moderate TL", NA))))
+
+
+plot_comp1_acr <- ggplot(pca.data, aes(x = as.factor(ACR1), y = Comp.1)) +
+  geom_boxplot(fill = "skyblue", color = "blue") +
+  stat_summary(fun = mean, geom = "point", shape = 18, size = 3, color = "blue") +
+  stat_summary(fun.data = mean_sdl, fun.args = list(mult = 1), geom = "errorbar", width = 0.2, color = "blue") +
+  labs(x = "Training Load Level", y = "Fatigue: Subjective") +
+  theme_minimal()
+
+plot_comp2_acr <- ggplot(pca.data, aes(x = as.factor(ACR1), y = Comp.2)) +
+  geom_boxplot(fill = "lightgreen", color = "darkgreen") +
+  stat_summary(fun = mean, geom = "point", shape = 18, size = 3, color = "darkgreen") +
+  stat_summary(fun.data = mean_sdl, fun.args = list(mult = 1), geom = "errorbar", width = 0.2, color = "darkgreen") +
+  labs(x = "Training Load Level", y = "Fatigue: Objective") +
+  theme_minimal()
+
+grid.arrange(plot_comp1_acr, plot_comp2_acr, ncol = 2)
+
